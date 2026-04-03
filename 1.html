@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synthwave Ostern - Highscore Edition 🚗🥚</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; color: #fff; font-family: "Segoe UI", sans-serif; }
+        
+        #ui-container {
+            position: absolute; top: 20px; right: 20px; text-align: right; z-index: 100;
+            background: rgba(0,0,0,0.6); padding: 8px 18px; border-radius: 20px;
+            backdrop-filter: blur(4px);
+            border-right: 2px solid #ff007f;
+            border-bottom: 2px solid #00ff88;
+        }
+        #score-board {
+            font-size: 2.8rem; font-weight: 800; color: #00ff88; text-shadow: 0 0 15px #00ff88; margin: 0;
+        }
+        #speed-display { font-size: 1.2rem; color: #ff007f; margin: 0; }
+        #missed-display {
+            font-size: 1rem; color: #ffaa44; margin-top: 5px; text-shadow: 0 0 5px #ffaa44;
+        }
+
+        #text-overlay {
+            position: absolute; top: 25%; width: 100%; text-align: center;
+            pointer-events: none; z-index: 10; opacity: 0;
+            transform: scale(0.1) perspective(500px) translateZ(-1000px);
+            transition: opacity 2.5s ease-in-out, transform 2.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        #text-overlay.visible { opacity: 1; transform: scale(1) perspective(500px) translateZ(0); }
+        #text-overlay h1 { font-size: 6rem; font-weight: 800; color: #fff2a8; text-shadow: 0 0 10px #ff007f, 0 0 40px #ff007f; }
+
+        #controls {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            color: #00ff88; font-size: 1.2rem; z-index: 20; text-shadow: 0 0 10px #00ff88;
+            background: rgba(0,0,0,0.5); padding: 5px 20px; border-radius: 40px;
+            pointer-events: none;
+        }
+
+        /* GAME OVER PANEL */
+        #gameover-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 340px;
+            max-width: 85vw;
+            background: rgba(0,0,0,0.92);
+            backdrop-filter: blur(12px);
+            border: 2px solid #ff007f;
+            border-radius: 24px;
+            padding: 20px;
+            text-align: center;
+            z-index: 200;
+            display: none;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: 0 0 40px rgba(255,0,127,0.5);
+            font-family: monospace;
+        }
+        #gameover-panel h2 {
+            color: #ff3366;
+            text-shadow: 0 0 8px #ff3366;
+            margin: 0;
+            font-size: 2rem;
+        }
+        #final-score {
+            font-size: 2rem;
+            color: #00ff88;
+            font-weight: bold;
+        }
+        #highscore-list {
+            background: #111;
+            border-radius: 16px;
+            padding: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            text-align: left;
+            font-size: 1rem;
+        }
+        .highscore-entry {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 10px;
+            border-bottom: 1px solid #333;
+        }
+        .highscore-name { color: #ffaa88; }
+        .highscore-score { color: #88ffaa; font-weight: bold; }
+        #name-input {
+            background: #222;
+            border: 1px solid #ff007f;
+            color: white;
+            padding: 8px;
+            border-radius: 40px;
+            text-align: center;
+            font-size: 1rem;
+            outline: none;
+        }
+        button {
+            background: #ff007f;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 40px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 1rem;
+        }
+        button:hover {
+            background: #ff44aa;
+            transform: scale(1.02);
+            box-shadow: 0 0 12px #ff007f;
+        }
+        .restart-btn {
+            background: #00aa66;
+        }
+        .restart-btn:hover {
+            background: #00ff88;
+            color: black;
+        }
+        .info-text {
+            font-size: 0.8rem;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-container">
+        <div id="score-board">🥚 EIER: 0</div>
+        <div id="speed-display">⚡ KM/H: 50</div>
+        <div id="missed-display">💔 VERPASST: 0 / 3</div>
+    </div>
+
+    <div id="text-overlay">
+        <h1>⚡ FROHE OSTERN ⚡</h1>
+    </div>
+
+    <div id="canvas-container"></div>
+    <div id="controls">⬅️ ← LINKS / RECHTS → ➡️</div>
+
+    <!-- GAME OVER PANEL -->
+    <div id="gameover-panel">
+        <h2>💀 GAME OVER 💀</h2>
+        <div>DEINE PUNKTE:</div>
+        <div id="final-score">0</div>
+        <div id="highscore-list">
+            <div style="text-align:center; color:#aaa;">🏆 HIGHSCORES 🏆</div>
+            <!-- wird dynamisch befüllt -->
+        </div>
+        <input type="text" id="name-input" placeholder="DEIN NAME" maxlength="15">
+        <button id="save-score-btn">💾 SCORE SPEICHERN</button>
+        <button id="restart-btn" class="restart-btn">🔄 NEUSTART</button>
+        <div class="info-text">Nach Spielende Namen eintragen & speichern – dann neustarten</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // ========== SPIEL-ZUSTAND ==========
+        let gameActive = true;
+        let score = 0;
+        let currentSpeed = 50;
+        let missedEggs = 0;           // verpasste Eier (max 3 -> Game Over)
+        let eggSpawnTimer = 0;
+        const eggs = [];
+        const lanes = [-60, 0, 60];
+        let currentLane = 1;
+        let carX = 0;
+        
+        // Highscore (lokal)
+        let highscores = [];
+        
+        // ========== THREE GLOBALS ==========
+        let scene, camera, renderer, clock;
+        let carGroup, leftTaillight, rightTaillight;
+        let terrainMesh, dashedElements = [];
+        let stars, bgStars;   // Sterne-Objekte für Twinkling
+        let starBaseColors = [], starPhases = [], starSpeeds = [], starMinB = [], starMaxB = [];
+        let STAR_COUNT;
+        
+        // Bewegungsparameter
+        let accumulatedTravel = 0;
+        
+        // ========== AUDIO ==========
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playCollectSound() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+        }
+        
+        // ========== HIGHSCORE LOGIK ==========
+        function loadHighscores() {
+            const stored = localStorage.getItem("ostern_highscores");
+            if (stored) {
+                highscores = JSON.parse(stored);
+            } else {
+                highscores = [];
+            }
+            // sortieren absteigend
+            highscores.sort((a,b) => b.score - a.score);
+            if (highscores.length > 10) highscores = highscores.slice(0,10);
+            renderHighscoreList();
+        }
+        
+        function saveHighscore(name, scoreVal) {
+            if (!name.trim()) name = "ANONYM";
+            highscores.push({ name: name.trim().substring(0,15), score: scoreVal });
+            highscores.sort((a,b) => b.score - a.score);
+            if (highscores.length > 10) highscores = highscores.slice(0,10);
+            localStorage.setItem("ostern_highscores", JSON.stringify(highscores));
+            renderHighscoreList();
+        }
+        
+        function renderHighscoreList() {
+            const container = document.getElementById("highscore-list");
+            if (!container) return;
+            container.innerHTML = '<div style="text-align:center; color:#aaa;">🏆 HIGHSCORES 🏆</div>';
+            if (highscores.length === 0) {
+                container.innerHTML += '<div class="highscore-entry"><span>✨ Noch keine Einträge</span></div>';
+                return;
+            }
+            highscores.forEach(entry => {
+                const div = document.createElement("div");
+                div.className = "highscore-entry";
+                div.innerHTML = `<span class="highscore-name">${escapeHtml(entry.name)}</span><span class="highscore-score">${entry.score} 🥚</span>`;
+                container.appendChild(div);
+            });
+        }
+        
+        function escapeHtml(str) {
+            return str.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+        
+        // ========== GAME OVER ==========
+        function gameOver() {
+            if (!gameActive) return;
+            gameActive = false;
+            document.getElementById("final-score").innerText = score;
+            document.getElementById("gameover-panel").style.display = "flex";
+            // Highscore-Liste aktuell halten
+            renderHighscoreList();
+        }
+        
+        // ========== RESTART ==========
+        function restartGame() {
+            // Spielzustand zurücksetzen
+            gameActive = true;
+            score = 0;
+            currentSpeed = 50;
+            missedEggs = 0;
+            currentLane = 1;
+            carX = 0;
+            accumulatedTravel = 0;
+            eggSpawnTimer = 0;
+            
+            // Alle existierenden Eier aus der Szene entfernen
+            for (let i = 0; i < eggs.length; i++) {
+                if (eggs[i]) scene.remove(eggs[i]);
+            }
+            eggs.length = 0;
+            
+            // Auto wieder in die Mitte
+            carGroup.position.x = 0;
+            carX = 0;
+            currentLane = 1;
+            
+            // Kamera zurücksetzen
+            camera.position.set(0, 25, 120);
+            camera.lookAt(0, 15, -150);
+            
+            // UI updaten
+            document.getElementById("score-board").innerText = `🥚 EIER: 0`;
+            document.getElementById("speed-display").innerText = `⚡ KM/H: 50`;
+            document.getElementById("missed-display").innerHTML = `💔 VERPASST: 0 / 3`;
+            
+            // Panel ausblenden
+            document.getElementById("gameover-panel").style.display = "none";
+            
+            // Spawn-Timer zurücksetzen (gleich erscheinen wieder Eier)
+            eggSpawnTimer = 0.5;
+        }
+        
+        // ========== THREE SETUP ==========
+        function initThree() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x000000, 0.001);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3500);
+            camera.position.set(0, 25, 120);
+            camera.lookAt(0, 15, -150);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            clock = new THREE.Clock();
+            
+            // Auto Group
+            carGroup = new THREE.Group();
+            const silverMat = new THREE.MeshLambertMaterial({ color: 0xc0c0c0, metalness: 0.8, roughness: 0.2 });
+            const body = new THREE.Mesh(new THREE.BoxGeometry(22, 7, 48), silverMat);
+            body.position.y = 2.2; carGroup.add(body);
+            const rear = new THREE.Mesh(new THREE.BoxGeometry(22, 5, 15), new THREE.MeshLambertMaterial({ color: 0x444444 }));
+            rear.position.set(0, 1.5, 16.5); carGroup.add(rear);
+            const roof = new THREE.Mesh(new THREE.BoxGeometry(16, 4.5, 25), new THREE.MeshLambertMaterial({ color: 0x666666 }));
+            roof.position.set(0, 5.8, 4); carGroup.add(roof);
+            
+            const taillightMat = new THREE.MeshBasicMaterial({ color: 0xff4444 });
+            leftTaillight = new THREE.Mesh(new THREE.BoxGeometry(3.5, 2, 1), taillightMat);
+            leftTaillight.position.set(-8, 2, 23); carGroup.add(leftTaillight);
+            rightTaillight = leftTaillight.clone();
+            rightTaillight.position.set(8, 2, 23); carGroup.add(rightTaillight);
+            
+            const wheelGeo = new THREE.CylinderGeometry(3, 3, 3.5, 16);
+            const wheelMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+            [[-10, 0, 16], [10, 0, 16], [-10, 0, -16], [10, 0, -16]].forEach(pos => {
+                const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+                wheel.rotation.z = Math.PI / 2; wheel.position.set(pos[0], pos[1], pos[2]);
+                carGroup.add(wheel);
+            });
+            carGroup.position.y = -22;
+            carGroup.position.z = 20;
+            scene.add(carGroup);
+            
+            // Lichter
+            scene.add(new THREE.AmbientLight(0x404040, 0.6));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            dirLight.position.set(0, 50, 50); scene.add(dirLight);
+            
+            // ===== VERBESSERTER STERNENHIMMEL =====
+            const createGlowTexture = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 64; canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, 64, 64);
+                const centerX = 32, centerY = 32;
+                const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 32);
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                gradient.addColorStop(0.3, 'rgba(255, 255, 200, 0.9)');
+                gradient.addColorStop(0.6, 'rgba(255, 180, 100, 0.5)');
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 64, 64);
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.beginPath();
+                for(let i = 0; i < 8; i++) {
+                    const angle = (i * Math.PI * 2 / 8);
+                    const x1 = centerX + Math.cos(angle) * 24;
+                    const y1 = centerY + Math.sin(angle) * 24;
+                    const x2 = centerX + Math.cos(angle + 0.4) * 12;
+                    const y2 = centerY + Math.sin(angle + 0.4) * 12;
+                    ctx.moveTo(centerX, centerY);
+                    ctx.lineTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.fillStyle = 'rgba(255, 210, 150, 0.3)';
+                    ctx.fill();
+                }
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.needsUpdate = true;
+                return texture;
+            };
+            
+            const starTexture = createGlowTexture();
+            STAR_COUNT = 1600;
+            const starPositions = [];
+            starBaseColors = [];
+            starPhases = [];
+            starSpeeds = [];
+            starMinB = [];
+            starMaxB = [];
+            
+            for (let i = 0; i < STAR_COUNT; i++) {
+                const x = (Math.random() - 0.5) * 2800;
+                const y = 80 + Math.random() * 600;
+                const z = -400 - Math.random() * 2600;
+                starPositions.push(x, y, z);
+                let r,g,b;
+                const rand = Math.random();
+                if (rand < 0.65) { r = 0.9+Math.random()*0.1; g = 0.9+Math.random()*0.1; b = 1.0; }
+                else if (rand < 0.85) { r = 1.0; g = 0.8+Math.random()*0.2; b = 0.6+Math.random()*0.3; }
+                else { r = 1.0; g = 0.5+Math.random()*0.4; b = 0.4+Math.random()*0.3; }
+                const intensityBase = 0.6 + Math.random() * 0.5;
+                starBaseColors.push({ r: r*intensityBase, g: g*intensityBase, b: b*intensityBase });
+                starPhases.push(Math.random() * Math.PI * 2);
+                starSpeeds.push(0.8 + Math.random() * 2.5);
+                starMinB.push(0.25 + Math.random() * 0.3);
+                starMaxB.push(0.7 + Math.random() * 0.5);
+            }
+            const starGeometry = new THREE.BufferGeometry();
+            starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+            const colorAttr = new Float32Array(STAR_COUNT * 3);
+            for (let i=0; i<STAR_COUNT; i++) {
+                colorAttr[i*3] = starBaseColors[i].r;
+                colorAttr[i*3+1] = starBaseColors[i].g;
+                colorAttr[i*3+2] = starBaseColors[i].b;
+            }
+            starGeometry.setAttribute('color', new THREE.BufferAttribute(colorAttr, 3));
+            const starMaterial = new THREE.PointsMaterial({ size: 22, map: starTexture, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.95 });
+            stars = new THREE.Points(starGeometry, starMaterial);
+            scene.add(stars);
+            
+            // Hintergrundsterne
+            const bgStarCount = 900;
+            const bgStarGeo = new THREE.BufferGeometry();
+            const bgPositions = [];
+            for (let i=0; i<bgStarCount; i++) bgPositions.push((Math.random()-0.5)*4000, Math.random()*800+50, -2000 - Math.random()*2200);
+            bgStarGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(bgPositions), 3));
+            const bgStarMat = new THREE.PointsMaterial({ color: 0xaaccff, size: 6, transparent: true, blending: THREE.AdditiveBlending, opacity: 0.5 });
+            bgStars = new THREE.Points(bgStarGeo, bgStarMat);
+            scene.add(bgStars);
+            
+            // Sonne
+            const sunCanvas = document.createElement('canvas');
+            sunCanvas.width = 512; sunCanvas.height = 512;
+            const sunCtx = sunCanvas.getContext('2d');
+            const sunGradient = sunCtx.createLinearGradient(0,0,0,512);
+            sunGradient.addColorStop(0, '#ff007f'); sunGradient.addColorStop(1, '#ffaa00');
+            sunCtx.fillStyle = sunGradient; sunCtx.beginPath(); sunCtx.arc(256,256,256,0,Math.PI*2); sunCtx.fill();
+            sunCtx.globalCompositeOperation = 'destination-out';
+            for(let i=0;i<15;i++) sunCtx.fillRect(0,220+i*22,512,3+i*1.8);
+            const sunMesh = new THREE.Mesh(new THREE.PlaneGeometry(600,600), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sunCanvas), transparent: true, fog: false }));
+            sunMesh.position.set(0,200,-900); scene.add(sunMesh);
+            
+            // Terrain
+            const planeDepth = 2000; const planeSegments = 80;
+            const terrainGeometry = new THREE.PlaneGeometry(2000, planeDepth, planeSegments, planeSegments);
+            terrainGeometry.rotateX(-Math.PI/2);
+            terrainGeometry.attributes.position.setUsage(THREE.DynamicDrawUsage);
+            terrainMesh = new THREE.Mesh(terrainGeometry, new THREE.MeshBasicMaterial({ color: 0x00FF00, wireframe: true, transparent: true, opacity: 0.6 }));
+            terrainMesh.position.y = -20; scene.add(terrainMesh);
+            
+            // Straße
+            const roadGroup = new THREE.Group();
+            dashedElements = [];
+            [[-90,'solid'],[-60,'dashed'],[-30,'solid'],[0,'dashed'],[30,'solid'],[60,'dashed'],[90,'solid']].forEach(cfg => {
+                if(cfg[1]==='solid') {
+                    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.5, planeDepth), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+                    mesh.rotation.x = -Math.PI/2; mesh.position.set(cfg[0], -19.9, -800); roadGroup.add(mesh);
+                } else {
+                    for(let j=0;j<40;j++) {
+                        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 25), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+                        mesh.rotation.x = -Math.PI/2; mesh.position.set(cfg[0], -19.9, -j*60);
+                        roadGroup.add(mesh); dashedElements.push(mesh);
+                    }
+                }
+            });
+            scene.add(roadGroup);
+        }
+        
+        function spawnEgg() {
+            if (!gameActive) return;
+            const eggColor = new THREE.Color().setHSL(Math.random(), 0.8, 0.6);
+            const eggGeo = new THREE.SphereGeometry(10, 16, 16);
+            const eggMat = new THREE.MeshPhongMaterial({ color: eggColor, emissive: eggColor, emissiveIntensity: 0.5 });
+            const egg = new THREE.Mesh(eggGeo, eggMat);
+            egg.scale.set(1, 1.4, 1);
+            egg.position.set(lanes[Math.floor(Math.random() * 3)], -10, -1500);
+            scene.add(egg);
+            eggs.push(egg);
+        }
+        
+        function updateStarTwinkle(time) {
+            if (!stars) return;
+            const colorAttr = stars.geometry.attributes.color.array;
+            for (let i = 0; i < STAR_COUNT; i++) {
+                const brightness = starMinB[i] + ((Math.sin(time * starSpeeds[i] + starPhases[i]) + 1) / 2) * (starMaxB[i] - starMinB[i]);
+                const base = starBaseColors[i];
+                colorAttr[i*3] = base.r * brightness;
+                colorAttr[i*3+1] = base.g * brightness;
+                colorAttr[i*3+2] = base.b * brightness;
+            }
+            stars.geometry.attributes.color.needsUpdate = true;
+            if (bgStars && bgStars.material) bgStars.material.opacity = 0.5 + Math.sin(time * 1.2) * 0.1;
+        }
+        
+        // ========== ANIMATION MIT GAME ACTIVE ==========
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(0.033, clock.getDelta());
+            const time = clock.getElapsedTime();
+            
+            // Sterne twinkeln immer
+            updateStarTwinkle(time);
+            
+            if (gameActive) {
+                // Auto Steuerung
+                const targetX = lanes[currentLane];
+                carX += (targetX - carX) * 0.12;
+                carGroup.position.x = carX;
+                leftTaillight.scale.setScalar(0.7 + Math.sin(time * 4) * 0.4);
+                rightTaillight.scale.setScalar(0.7 + Math.sin(time * 4) * 0.4);
+                
+                const speedScale = currentSpeed * 2.5;
+                accumulatedTravel += speedScale * delta;
+                const cellSize = 2000 / 80;
+                terrainMesh.position.z = accumulatedTravel % cellSize;
+                
+                // Terrain Höhen
+                const positions = terrainMesh.geometry.attributes.position.array;
+                const gridOffset = Math.floor(accumulatedTravel / cellSize) * cellSize;
+                for (let i = 0; i < positions.length; i += 3) {
+                    const x = positions[i];
+                    const vZ = positions[i+2] - gridOffset;
+                    const dist = Math.abs(x);
+                    let y = 0;
+                    if (dist > 105) {
+                        const intensity = Math.min((dist-105)/150, 1.0);
+                        const noise = Math.sin(x*0.05)*Math.cos(vZ*0.04)*45 + Math.sin(x*0.12)*Math.cos(vZ*0.1)*15;
+                        y = Math.max(0, ((dist-105)*0.4 + noise) * intensity);
+                    }
+                    positions[i+1] = y;
+                }
+                terrainMesh.geometry.attributes.position.needsUpdate = true;
+                
+                // Straßenmarkierungen
+                dashedElements.forEach((m, idx) => {
+                    let zPos = ( (idx % 40) * -60 + accumulatedTravel ) % 2400;
+                    if (zPos > 200) zPos -= 2400;
+                    m.position.z = zPos;
+                });
+                
+                // Eier Spawn
+                eggSpawnTimer -= delta;
+                if (eggSpawnTimer <= 0) {
+                    spawnEgg();
+                    eggSpawnTimer = Math.max(0.4, 2.0 - (currentSpeed/100));
+                }
+                
+                // Eier bewegen & Kollision / Verpasst
+                for (let i = eggs.length-1; i >= 0; i--) {
+                    const egg = eggs[i];
+                    egg.position.z += speedScale * delta;
+                    egg.rotation.y += delta * 2;
+                    const dZ = Math.abs(egg.position.z - carGroup.position.z);
+                    const dX = Math.abs(egg.position.x - carGroup.position.x);
+                    if (dZ < 20 && dX < 15) {
+                        scene.remove(egg);
+                        eggs.splice(i,1);
+                        score++;
+                        currentSpeed += 5;
+                        document.getElementById("score-board").innerText = `🥚 EIER: ${score}`;
+                        document.getElementById("speed-display").innerText = `⚡ KM/H: ${currentSpeed}`;
+                        playCollectSound();
+                    } else if (egg.position.z > 200) {
+                        // VERPASST!
+                        scene.remove(egg);
+                        eggs.splice(i,1);
+                        missedEggs++;
+                        document.getElementById("missed-display").innerHTML = `💔 VERPASST: ${missedEggs} / 3`;
+                        if (missedEggs >= 3) {
+                            gameOver();
+                        }
+                    }
+                }
+                
+                // Kamera folgen
+                camera.position.x += (carX * 0.4 - camera.position.x) * 0.05;
+                camera.lookAt(carX * 0.3, 10, -100);
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        // ========== INIT & EVENTLISTENER ==========
+        window.addEventListener('load', () => {
+            initThree();
+            loadHighscores();
+            animate();
+            
+            // Steuerung
+            document.addEventListener('keydown', (e) => {
+                if (!gameActive) return;
+                if (e.key === 'ArrowLeft') currentLane = Math.max(0, currentLane - 1);
+                if (e.key === 'ArrowRight') currentLane = Math.min(2, currentLane + 1);
+            });
+            
+            // UI Buttons
+            document.getElementById("save-score-btn").addEventListener("click", () => {
+                const nameInput = document.getElementById("name-input");
+                const name = nameInput.value.trim();
+                if (name === "") {
+                    saveHighscore("ANONYM", score);
+                } else {
+                    saveHighscore(name, score);
+                }
+                nameInput.value = "";
+                document.getElementById("save-score-btn").disabled = true;
+                setTimeout(() => { document.getElementById("save-score-btn").disabled = false; }, 500);
+            });
+            
+            document.getElementById("restart-btn").addEventListener("click", () => {
+                restartGame();
+            });
+            
+            // Text Overlay
+            const textOverlay = document.getElementById('text-overlay');
+            setTimeout(() => textOverlay.classList.add('visible'), 500);
+            setTimeout(() => textOverlay.style.opacity = '0', 6000);
+        });
+        
+        window.addEventListener('resize', () => {
+            if (camera) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+    </script>
+</body>
+</html>
