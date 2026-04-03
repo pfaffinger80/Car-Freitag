@@ -2,14 +2,14 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Synthwave Ostern - Highscore Edition 🚗🥚</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Synthwave Ostern - Game Edition 🚗</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; color: #fff; font-family: "Segoe UI", sans-serif; }
         
         #ui-container {
             position: absolute; top: 20px; right: 20px; text-align: right; z-index: 100;
-            background: rgba(0,0,0,0.6); padding: 8px 18px; border-radius: 20px;
+            background: rgba(0,0,0,0.5); padding: 8px 18px; border-radius: 20px;
             backdrop-filter: blur(4px);
             border-right: 2px solid #ff007f;
             border-bottom: 2px solid #00ff88;
@@ -31,14 +31,51 @@
         #text-overlay.visible { opacity: 1; transform: scale(1) perspective(500px) translateZ(0); }
         #text-overlay h1 { font-size: 6rem; font-weight: 800; color: #fff2a8; text-shadow: 0 0 10px #ff007f, 0 0 40px #ff007f; }
 
-        #controls {
-            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-            color: #00ff88; font-size: 1.2rem; z-index: 20; text-shadow: 0 0 10px #00ff88;
-            background: rgba(0,0,0,0.5); padding: 5px 20px; border-radius: 40px;
-            pointer-events: none;
+        /* NEUE BUTTON-LEISTE */
+        .button-panel {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            z-index: 200;
+            pointer-events: none; /* damit Klicks auf Canvas durchgehen, aber Buttons selbst sind clickable */
+        }
+        .control-btn {
+            pointer-events: auto;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(8px);
+            border: 2px solid #00ff88;
+            color: #00ff88;
+            font-size: 2rem;
+            font-weight: bold;
+            padding: 12px 30px;
+            border-radius: 60px;
+            cursor: pointer;
+            font-family: monospace;
+            transition: 0.2s;
+            box-shadow: 0 0 15px rgba(0,255,136,0.5);
+            text-shadow: 0 0 5px #00ff88;
+        }
+        .control-btn:active {
+            transform: scale(0.95);
+            background: #00ff88;
+            color: black;
+            box-shadow: 0 0 25px #00ff88;
+        }
+        @media (max-width: 600px) {
+            .control-btn {
+                font-size: 1.5rem;
+                padding: 8px 20px;
+            }
+            .button-panel { gap: 20px; bottom: 15px; }
+            #score-board { font-size: 1.8rem; }
+            #text-overlay h1 { font-size: 2.5rem; }
         }
 
-        /* GAME OVER PANEL */
+        /* Game Over Panel (bleibt gleich) */
         #gameover-panel {
             position: absolute;
             top: 50%;
@@ -52,7 +89,7 @@
             border-radius: 24px;
             padding: 20px;
             text-align: center;
-            z-index: 200;
+            z-index: 300;
             display: none;
             flex-direction: column;
             gap: 15px;
@@ -139,16 +176,20 @@
     </div>
 
     <div id="canvas-container"></div>
-    <div id="controls">⬅️ ← LINKS / RECHTS → ➡️</div>
 
-    <!-- GAME OVER PANEL -->
+    <!-- NEUE BUTTONS FÜR LINKS / RECHTS -->
+    <div class="button-panel">
+        <button class="control-btn" id="btn-left">◀ LINKS</button>
+        <button class="control-btn" id="btn-right">RECHTS ▶</button>
+    </div>
+
+    <!-- GAME OVER PANEL (unverändert) -->
     <div id="gameover-panel">
         <h2>💀 GAME OVER 💀</h2>
         <div>DEINE PUNKTE:</div>
         <div id="final-score">0</div>
         <div id="highscore-list">
             <div style="text-align:center; color:#aaa;">🏆 HIGHSCORES 🏆</div>
-            <!-- wird dynamisch befüllt -->
         </div>
         <input type="text" id="name-input" placeholder="DEIN NAME" maxlength="15">
         <button id="save-score-btn">💾 SCORE SPEICHERN</button>
@@ -162,25 +203,24 @@
         let gameActive = true;
         let score = 0;
         let currentSpeed = 50;
-        let missedEggs = 0;           // verpasste Eier (max 3 -> Game Over)
+        let missedEggs = 0;
         let eggSpawnTimer = 0;
         const eggs = [];
         const lanes = [-60, 0, 60];
-        let currentLane = 1;
+        let currentLane = 1;   // 0 = links, 1 = mitte, 2 = rechts
         let carX = 0;
         
-        // Highscore (lokal)
+        // Highscore
         let highscores = [];
         
         // ========== THREE GLOBALS ==========
         let scene, camera, renderer, clock;
         let carGroup, leftTaillight, rightTaillight;
         let terrainMesh, dashedElements = [];
-        let stars, bgStars;   // Sterne-Objekte für Twinkling
+        let stars, bgStars;
         let starBaseColors = [], starPhases = [], starSpeeds = [], starMinB = [], starMaxB = [];
         let STAR_COUNT;
         
-        // Bewegungsparameter
         let accumulatedTravel = 0;
         
         // ========== AUDIO ==========
@@ -206,7 +246,6 @@
             } else {
                 highscores = [];
             }
-            // sortieren absteigend
             highscores.sort((a,b) => b.score - a.score);
             if (highscores.length > 10) highscores = highscores.slice(0,10);
             renderHighscoreList();
@@ -246,19 +285,16 @@
             });
         }
         
-        // ========== GAME OVER ==========
+        // ========== GAME OVER & RESTART ==========
         function gameOver() {
             if (!gameActive) return;
             gameActive = false;
             document.getElementById("final-score").innerText = score;
             document.getElementById("gameover-panel").style.display = "flex";
-            // Highscore-Liste aktuell halten
             renderHighscoreList();
         }
         
-        // ========== RESTART ==========
         function restartGame() {
-            // Spielzustand zurücksetzen
             gameActive = true;
             score = 0;
             currentSpeed = 50;
@@ -268,31 +304,33 @@
             accumulatedTravel = 0;
             eggSpawnTimer = 0;
             
-            // Alle existierenden Eier aus der Szene entfernen
             for (let i = 0; i < eggs.length; i++) {
                 if (eggs[i]) scene.remove(eggs[i]);
             }
             eggs.length = 0;
             
-            // Auto wieder in die Mitte
             carGroup.position.x = 0;
             carX = 0;
             currentLane = 1;
-            
-            // Kamera zurücksetzen
             camera.position.set(0, 25, 120);
             camera.lookAt(0, 15, -150);
             
-            // UI updaten
             document.getElementById("score-board").innerText = `🥚 EIER: 0`;
             document.getElementById("speed-display").innerText = `⚡ KM/H: 50`;
             document.getElementById("missed-display").innerHTML = `💔 VERPASST: 0 / 3`;
-            
-            // Panel ausblenden
             document.getElementById("gameover-panel").style.display = "none";
             
-            // Spawn-Timer zurücksetzen (gleich erscheinen wieder Eier)
             eggSpawnTimer = 0.5;
+        }
+        
+        // === Funktion zum Ändern der Spur (wird von Tasten & Buttons aufgerufen) ===
+        function changeLane(direction) {
+            if (!gameActive) return;
+            if (direction === 'left') {
+                currentLane = Math.max(0, currentLane - 1);
+            } else if (direction === 'right') {
+                currentLane = Math.min(2, currentLane + 1);
+            }
         }
         
         // ========== THREE SETUP ==========
@@ -334,7 +372,6 @@
             carGroup.position.z = 20;
             scene.add(carGroup);
             
-            // Lichter
             scene.add(new THREE.AmbientLight(0x404040, 0.6));
             const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
             dirLight.position.set(0, 50, 50); scene.add(dirLight);
@@ -411,7 +448,6 @@
             stars = new THREE.Points(starGeometry, starMaterial);
             scene.add(stars);
             
-            // Hintergrundsterne
             const bgStarCount = 900;
             const bgStarGeo = new THREE.BufferGeometry();
             const bgPositions = [];
@@ -441,7 +477,6 @@
             terrainMesh = new THREE.Mesh(terrainGeometry, new THREE.MeshBasicMaterial({ color: 0x00FF00, wireframe: true, transparent: true, opacity: 0.6 }));
             terrainMesh.position.y = -20; scene.add(terrainMesh);
             
-            // Straße
             const roadGroup = new THREE.Group();
             dashedElements = [];
             [[-90,'solid'],[-60,'dashed'],[-30,'solid'],[0,'dashed'],[30,'solid'],[60,'dashed'],[90,'solid']].forEach(cfg => {
@@ -485,17 +520,15 @@
             if (bgStars && bgStars.material) bgStars.material.opacity = 0.5 + Math.sin(time * 1.2) * 0.1;
         }
         
-        // ========== ANIMATION MIT GAME ACTIVE ==========
+        // ========== ANIMATION ==========
         function animate() {
             requestAnimationFrame(animate);
             const delta = Math.min(0.033, clock.getDelta());
             const time = clock.getElapsedTime();
             
-            // Sterne twinkeln immer
             updateStarTwinkle(time);
             
             if (gameActive) {
-                // Auto Steuerung
                 const targetX = lanes[currentLane];
                 carX += (targetX - carX) * 0.12;
                 carGroup.position.x = carX;
@@ -507,7 +540,6 @@
                 const cellSize = 2000 / 80;
                 terrainMesh.position.z = accumulatedTravel % cellSize;
                 
-                // Terrain Höhen
                 const positions = terrainMesh.geometry.attributes.position.array;
                 const gridOffset = Math.floor(accumulatedTravel / cellSize) * cellSize;
                 for (let i = 0; i < positions.length; i += 3) {
@@ -524,21 +556,18 @@
                 }
                 terrainMesh.geometry.attributes.position.needsUpdate = true;
                 
-                // Straßenmarkierungen
                 dashedElements.forEach((m, idx) => {
                     let zPos = ( (idx % 40) * -60 + accumulatedTravel ) % 2400;
                     if (zPos > 200) zPos -= 2400;
                     m.position.z = zPos;
                 });
                 
-                // Eier Spawn
                 eggSpawnTimer -= delta;
                 if (eggSpawnTimer <= 0) {
                     spawnEgg();
                     eggSpawnTimer = Math.max(0.4, 2.0 - (currentSpeed/100));
                 }
                 
-                // Eier bewegen & Kollision / Verpasst
                 for (let i = eggs.length-1; i >= 0; i--) {
                     const egg = eggs[i];
                     egg.position.z += speedScale * delta;
@@ -554,18 +583,14 @@
                         document.getElementById("speed-display").innerText = `⚡ KM/H: ${currentSpeed}`;
                         playCollectSound();
                     } else if (egg.position.z > 200) {
-                        // VERPASST!
                         scene.remove(egg);
                         eggs.splice(i,1);
                         missedEggs++;
                         document.getElementById("missed-display").innerHTML = `💔 VERPASST: ${missedEggs} / 3`;
-                        if (missedEggs >= 3) {
-                            gameOver();
-                        }
+                        if (missedEggs >= 3) gameOver();
                     }
                 }
                 
-                // Kamera folgen
                 camera.position.x += (carX * 0.4 - camera.position.x) * 0.05;
                 camera.lookAt(carX * 0.3, 10, -100);
             }
@@ -579,30 +604,29 @@
             loadHighscores();
             animate();
             
-            // Steuerung
+            // Tastatursteuerung
             document.addEventListener('keydown', (e) => {
                 if (!gameActive) return;
-                if (e.key === 'ArrowLeft') currentLane = Math.max(0, currentLane - 1);
-                if (e.key === 'ArrowRight') currentLane = Math.min(2, currentLane + 1);
+                if (e.key === 'ArrowLeft') changeLane('left');
+                if (e.key === 'ArrowRight') changeLane('right');
             });
             
-            // UI Buttons
+            // NEUE BUTTONS
+            const leftBtn = document.getElementById('btn-left');
+            const rightBtn = document.getElementById('btn-right');
+            leftBtn.addEventListener('click', () => changeLane('left'));
+            rightBtn.addEventListener('click', () => changeLane('right'));
+            
+            // Game Over Panel Buttons
             document.getElementById("save-score-btn").addEventListener("click", () => {
                 const nameInput = document.getElementById("name-input");
                 const name = nameInput.value.trim();
-                if (name === "") {
-                    saveHighscore("ANONYM", score);
-                } else {
-                    saveHighscore(name, score);
-                }
+                saveHighscore(name, score);
                 nameInput.value = "";
                 document.getElementById("save-score-btn").disabled = true;
                 setTimeout(() => { document.getElementById("save-score-btn").disabled = false; }, 500);
             });
-            
-            document.getElementById("restart-btn").addEventListener("click", () => {
-                restartGame();
-            });
+            document.getElementById("restart-btn").addEventListener("click", () => restartGame());
             
             // Text Overlay
             const textOverlay = document.getElementById('text-overlay');
